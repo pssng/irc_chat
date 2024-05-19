@@ -4,14 +4,16 @@ import it.pssng.parthIrc.model.UserRole;
 import it.pssng.parthIrc.utils.BannerUtil;
 import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
-
-import it.pssng.parthIrc.model.CacheObject;
+import it.pssng.parthIrc.json.JsonMessage;
+import it.pssng.parthIrc.json.JsonRedis;
 import it.pssng.parthIrc.model.UserDetails;
 
 import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
+
+import com.google.gson.JsonObject;
 
 @Log4j2
 public class IRCChatServer {
@@ -22,13 +24,13 @@ public class IRCChatServer {
 
         BannerUtil.printBanner();
 
-        try {
-            log.info("Testing Redis..");
-            CacheService cache = new CacheService();
-            cache.save("TEST_FISCAL_CODE", new CacheObject());
-        } catch (Exception exc) {
-            throw new IOException("Redis session not found!");
-        }
+        log.info("Testing Redis..");
+        CacheService cache = new CacheService();
+
+        JsonRedis jsonRedis = new JsonRedis("TEST_REDIS");
+        jsonRedis.loadMessage(new JsonMessage("TEST_REDIS", "CIAO SONO DAMIANO DAI MANESKIN"));
+        jsonRedis.loadMessage(new JsonMessage("TEST_REDIS", "CIAO SONO DAMIANO DAI MANESKIN"));
+        cache.save("TEST_FISCAL_CODE", jsonRedis.toString());
 
         ServerSocket serverSocket = new ServerSocket(PORT);
         log.info("Service started at port {}", PORT);
@@ -61,6 +63,7 @@ public class IRCChatServer {
                 out.println("Se desideri recuperare una vecchia chat digita [1]");
                 out.println("Se desideri iniziare una nuova chat digita [2]");
 
+                UserDetails userDetails = new UserDetails();
                 String scelta = in.readLine();
                 log.info("SCELTA: {}", scelta);
 
@@ -77,7 +80,6 @@ public class IRCChatServer {
                         UserDetails adminA = new UserDetails("Nadia Rea", "ROSSO", UserRole.USER);
 
                         String sceltaMock = in.readLine();
-                        UserDetails userDetails = new UserDetails();
 
                         switch (sceltaMock) {
                             case "1":
@@ -123,9 +125,8 @@ public class IRCChatServer {
                             out.println("Ciao " + username
                                     + ", benvenuto nella chat di supporto, a breve un nostro operatore si collegherà per aiutarti!.\nSalva l'ID della chat per recuperarla in futuro: "
                                     + UUID.randomUUID());
-                        
-                        
-                                }
+
+                        }
                         break;
                     default:
                         log.error("Choice {} illegal.", scelta);
@@ -136,13 +137,28 @@ public class IRCChatServer {
                 String message;
                 while ((message = in.readLine()) != null) {
                     broadcastMessage(username, message, currentChannel);
+                    CacheService cache = new CacheService();
+
+                    String redisKey = userDetails.getRole() == UserRole.ADMIN ? currentChannel.split("_")[1] : username;
+
+                    if (cache.exists(redisKey)) {
+                        JsonRedis cacheHistory = cache.retrieve(redisKey);
+                        log.info(cacheHistory);
+                        cacheHistory.loadMessage(new JsonMessage(username, message));
+                        cache.save(redisKey, cacheHistory.toString());
+                        cache.close();
+                    } else {
+
+                        JsonRedis jsonRedis = new JsonRedis(redisKey);
+                        jsonRedis.loadMessage(new JsonMessage(username, message));
+                        cache.save(redisKey, jsonRedis.toString());
+                    }
+
                 }
             } catch (IOException e) {
                 log.error("Error handling client: ", e);
             } finally {
                 try {
-                    CacheService cacheService = new CacheService();
-                    cacheService.save(username,new CacheObject(in,out));
                     socket.close();
                 } catch (IOException e) {
                     log.error("Error closing socket: ", e);
