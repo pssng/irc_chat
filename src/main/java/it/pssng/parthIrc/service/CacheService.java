@@ -49,7 +49,7 @@ public class CacheService {
                 reader.setLenient(true);
                 JsonObject jsonObject = JsonParser.parseReader(reader).getAsJsonObject();
 
-                String chatId = jsonObject.get("chatId").getAsString();
+                String chatId = jsonObject.get("chat-id").getAsString();
                 JsonRedis jsonRedis = new JsonRedis(chatId);
                 
                 JsonArray messagesArray = jsonObject.getAsJsonArray("list");
