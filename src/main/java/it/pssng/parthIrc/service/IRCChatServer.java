@@ -6,14 +6,12 @@ import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
 import it.pssng.parthIrc.json.JsonMessage;
 import it.pssng.parthIrc.json.JsonRedis;
-import it.pssng.parthIrc.model.UserDetails;
+import it.pssng.parthIrc.model.SessionData;
 
 import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
-
-import com.google.gson.JsonObject;
 
 @Log4j2
 public class IRCChatServer {
@@ -28,8 +26,7 @@ public class IRCChatServer {
         CacheService cache = new CacheService();
 
         JsonRedis jsonRedis = new JsonRedis("TEST_REDIS");
-        jsonRedis.loadMessage(new JsonMessage("TEST_REDIS", "CIAO SONO DAMIANO DAI MANESKIN"));
-        jsonRedis.loadMessage(new JsonMessage("TEST_REDIS", "CIAO SONO DAMIANO DAI MANESKIN"));
+        jsonRedis.loadMessage(new JsonMessage("TEST_REDIS", "HELLO FROM PSSNG IRC"));
         cache.save("TEST_FISCAL_CODE", jsonRedis.toString());
 
         ServerSocket serverSocket = new ServerSocket(PORT);
@@ -59,79 +56,39 @@ public class IRCChatServer {
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
                 out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8"), true);
 
-                out.println("BENVENUTO NEL SERVIZIO DI SUPPORTO DI 'JustArt'! ");
-                out.println("Se desideri recuperare una vecchia chat digita [1]");
-                out.println("Se desideri iniziare una nuova chat digita [2]");
+                out.println("");
+                SessionData userDetails = new SessionData(in.readLine());                
 
-                UserDetails userDetails = new UserDetails();
-                String scelta = in.readLine();
-                log.info("SCELTA: {}", scelta);
+                if (userDetails.getRole() == UserRole.ADMIN) {
+                    username = userDetails.getFiscalCode();
+                    out.println("Benvenuto " + username);
 
-                switch (scelta) {
-                    case "1":
-                        out.print("Inserisci il codice della chat: ");
-                        String codice = in.readLine();
-                        break;
-                    case "2":
-                        // Mock Users
-                        UserDetails admin = new UserDetails("Mario Rossi", "LACAPOCCHIA", UserRole.ADMIN);
-                        UserDetails user = new UserDetails("Armando Cobucci", "FRESCA", UserRole.USER);
-                        UserDetails userA = new UserDetails("Luca Catone", "ILGLANDE", UserRole.ADMIN);
-                        UserDetails adminA = new UserDetails("Nadia Rea", "ROSSO", UserRole.USER);
+                    synchronized (channels) {
+                        Map.Entry<String, List<PrintWriter>> mapFirst = channels.entrySet().iterator().next();
+                        currentChannel = mapFirst.getKey();
+                        out.println("Ti sei connesso al canale: " + currentChannel);
+                        mapFirst.getValue().add(out);
+                    }
 
-                        String sceltaMock = in.readLine();
-
-                        switch (sceltaMock) {
-                            case "1":
-                                userDetails = admin;
-                                break;
-                            case "2":
-                                userDetails = user;
-                                break;
-                            case "3":
-                                userDetails = userA;
-                                break;
-                            case "4":
-                                userDetails = adminA;
-                                break;
+                    broadcastMessage("Operatore connesso alla chat", currentChannel);
+                } else {
+                    currentChannel = "channel_" + userDetails.getFiscalCode();
+                    synchronized (channels) {
+                        channels.putIfAbsent(currentChannel, new ArrayList<>());
+                        List<PrintWriter> channelUsers = channels.get(currentChannel);
+                        if (channelUsers.size() >= 2) {
+                            out.println("Il canale è pieno. Disconnessione...");
+                            return;
                         }
+                        channelUsers.add(out);
+                    }
+                    username = userDetails.getFiscalCode();
+                    log.info("Ciao " + username + ", benvenuto nel tuo canale: "
+                            + currentChannel);
+                    out.println("Ciao " + username
+                            + ", benvenuto nella chat di supporto, a breve un nostro operatore si collegherà per aiutarti!.\nSalva l'ID della chat per recuperarla in futuro: "
+                            + UUID.randomUUID());
 
-                        if (userDetails.getRole() == UserRole.ADMIN) {
-                            username = userDetails.getFiscalCode();
-                            out.println("Benvenuto " + username);
-
-                            synchronized (channels) {
-                                Map.Entry<String, List<PrintWriter>> mapFirst = channels.entrySet().iterator().next();
-                                currentChannel = mapFirst.getKey();
-                                out.println("Ti sei connesso al canale: " + currentChannel);
-                                mapFirst.getValue().add(out);
-                            }
-
-                            broadcastMessage("Operatore connesso alla chat", currentChannel);
-                        } else {
-                            currentChannel = "channel_" + userDetails.getFiscalCode();
-                            synchronized (channels) {
-                                channels.putIfAbsent(currentChannel, new ArrayList<>());
-                                List<PrintWriter> channelUsers = channels.get(currentChannel);
-                                if (channelUsers.size() >= 2) {
-                                    out.println("Il canale è pieno. Disconnessione...");
-                                    return;
-                                }
-                                channelUsers.add(out);
-                            }
-                            username = userDetails.getFiscalCode();
-                            log.info("Ciao " + username + ", benvenuto nel tuo canale: "
-                                    + currentChannel);
-                            out.println("Ciao " + username
-                                    + ", benvenuto nella chat di supporto, a breve un nostro operatore si collegherà per aiutarti!.\nSalva l'ID della chat per recuperarla in futuro: "
-                                    + UUID.randomUUID());
-
-                        }
-                        break;
-                    default:
-                        log.error("Choice {} illegal.", scelta);
-                        out.println("Scelta non valida");
-                        return;
                 }
 
                 String message;
@@ -155,7 +112,9 @@ public class IRCChatServer {
                     }
 
                 }
-            } catch (IOException e) {
+            } catch (
+
+            IOException e) {
                 log.error("Error handling client: ", e);
             } finally {
                 try {
