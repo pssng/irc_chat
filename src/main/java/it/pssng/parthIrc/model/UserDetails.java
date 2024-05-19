@@ -3,8 +3,10 @@ package it.pssng.parthIrc.model;
 import com.google.gson.JsonObject;
 import it.pssng.parthIrc.utils.Base64Util;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
+@NoArgsConstructor
 public class UserDetails {
 
     private String generals;

@@ -1,10 +1,11 @@
 package it.pssng.parthIrc.service;
 
-
 import it.pssng.parthIrc.model.UserRole;
+import it.pssng.parthIrc.utils.BannerUtil;
 import lombok.SneakyThrows;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import lombok.extern.log4j.Log4j2;
+
+import it.pssng.parthIrc.model.CacheObject;
 import it.pssng.parthIrc.model.UserDetails;
 
 import java.io.*;
@@ -12,17 +13,25 @@ import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-
+@Log4j2
 public class IRCChatServer {
     private static final int PORT = 8887;
-    private static final Map<Channel, List<PrintWriter>> channels = new ConcurrentHashMap<>();
-
-    private static final Logger log = LogManager.getLogger("IRCChatServer");
+    private static final Map<String, List<PrintWriter>> channels = new ConcurrentHashMap<>();
 
     public static void main(String[] args) throws IOException {
-        ServerSocket serverSocket = new ServerSocket(PORT);
-        log.info("Service started at port {}",PORT);
 
+        BannerUtil.printBanner();
+
+        try {
+            log.info("Testing Redis..");
+            CacheService cache = new CacheService();
+            cache.save("TEST_FISCAL_CODE", new CacheObject());
+        } catch (Exception exc) {
+            throw new IOException("Redis session not found!");
+        }
+
+        ServerSocket serverSocket = new ServerSocket(PORT);
+        log.info("Service started at port {}", PORT);
 
         while (true) {
             Socket clientSocket = serverSocket.accept();
@@ -31,25 +40,16 @@ public class IRCChatServer {
         }
     }
 
-
     private static class ClientHandler extends Thread {
         private final Socket socket;
         private PrintWriter out;
         private BufferedReader in;
         private String username;
-        private Channel channel = new Channel();
+        private String currentChannel;
 
         public ClientHandler(Socket socket) {
             this.socket = socket;
         }
-
-        @SuppressWarnings("unused")
-        private void flushBuffer(BufferedReader buffer) throws IOException {
-            while (buffer.ready()) {
-                buffer.read();
-            }
-        }
-
 
         @SneakyThrows
         public void run() {
@@ -57,85 +57,75 @@ public class IRCChatServer {
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
                 out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8"), true);
 
-                flushBuffer(in);
-
                 out.println("BENVENUTO NEL SERVIZIO DI SUPPORTO DI 'JustArt'! ");
                 out.println("Se desideri recuperare una vecchia chat digita [1]");
                 out.println("Se desideri iniziare una nuova chat digita [2]");
 
                 String scelta = in.readLine();
-                log.info("SCELTA: {}",scelta);
+                log.info("SCELTA: {}", scelta);
 
-                switch(scelta){
+                switch (scelta) {
                     case "1":
                         out.print("Inserisci il codice della chat: ");
                         String codice = in.readLine();
                         break;
                     case "2":
-
-//                        out.println("Inserire Jwt Token: ");
-//                        String jwt = in.readLine();
-
-
-                        UserDetails admin = new UserDetails("Mario Rossi","ASDFFG", UserRole.ADMIN);
-                        UserDetails user = new UserDetails("Armando Cobucci","FGFG",UserRole.USER);
-                        out.println("MOCKED USERS:\n1 - "+admin+"\n2 - "+user);
+                        // Mock Users
+                        UserDetails admin = new UserDetails("Mario Rossi", "LACAPOCCHIA", UserRole.ADMIN);
+                        UserDetails user = new UserDetails("Armando Cobucci", "FRESCA", UserRole.USER);
+                        UserDetails userA = new UserDetails("Luca Catone", "ILGLANDE", UserRole.ADMIN);
+                        UserDetails adminA = new UserDetails("Nadia Rea", "ROSSO", UserRole.USER);
 
                         String sceltaMock = in.readLine();
+                        UserDetails userDetails = new UserDetails();
 
-                        UserDetails userDetails = sceltaMock.equals("1") ? admin : user;
-
-                        switch (userDetails.getRole()){
-                            case ADMIN:
-
-                                username = userDetails.getFiscalCode();
-
-                                out.println("Benvenuto " + username);
-
-                                out.println("Scegli un canale esistente:");
-
-                                Channel assignedChannel = new Channel();
-                                List<PrintWriter> assignedPrintWriter = new ArrayList<>();
-
-                                synchronized (channels) {
-                                    Map.Entry<Channel, List<PrintWriter>> mapFirst = channels.entrySet().iterator().next();
-                                    channels.remove(mapFirst.getKey());
-                                    assignedChannel = mapFirst.getKey();
-                                    assignedPrintWriter = mapFirst.getValue();
-
-                                }
-
-                                channel = assignedChannel;
-
-                                out.println("Ti sei connesso al canale: " + assignedChannel.getChannel());
-                                broadcastMessage("Operatore connesso alla chat", assignedChannel.getChannel());
-                                break; //break dello switch
-                            case USER:
-                                Channel userChannel = new Channel("channel_" + userDetails.getFiscalCode(),false);
-
-                                synchronized (channels) {
-                                    if (!channels.containsKey(userChannel)) {
-                                        channels.put(userChannel, new ArrayList<>());
-                                    }
-                                    List<PrintWriter> channelUsers = channels.get(userChannel);
-                                    if (channelUsers.size() >= 2) {
-                                        out.println("Il canale è pieno. Disconnessione...");
-                                        System.out.println("Il canale è pieno. Disconnessione...");
-                                        return;
-                                    }
-                                    channelUsers.add(out);
-                                }
-
-
-                                channel.setChannel(userChannel.getChannel());
-
-                                log.info("Ciao " + userDetails.getGenerals() + ", benvenuto nel tuo canale: " + userChannel);
-                                out.println("Ciao " + userDetails.getGenerals() + ", benvenuto nella chat di supporto, a breve un nostro operatore si collegherà per aiutarti!.\nSalva l'ID della chat per recuperarla in futuro: " + UUID.randomUUID());
-
-
+                        switch (sceltaMock) {
+                            case "1":
+                                userDetails = admin;
                                 break;
-                         }
+                            case "2":
+                                userDetails = user;
+                                break;
+                            case "3":
+                                userDetails = userA;
+                                break;
+                            case "4":
+                                userDetails = adminA;
+                                break;
+                        }
 
+                        if (userDetails.getRole() == UserRole.ADMIN) {
+                            username = userDetails.getFiscalCode();
+                            out.println("Benvenuto " + username);
+
+                            synchronized (channels) {
+                                Map.Entry<String, List<PrintWriter>> mapFirst = channels.entrySet().iterator().next();
+                                currentChannel = mapFirst.getKey();
+                                out.println("Ti sei connesso al canale: " + currentChannel);
+                                mapFirst.getValue().add(out);
+                            }
+
+                            broadcastMessage("Operatore connesso alla chat", currentChannel);
+                        } else {
+                            currentChannel = "channel_" + userDetails.getFiscalCode();
+                            synchronized (channels) {
+                                channels.putIfAbsent(currentChannel, new ArrayList<>());
+                                List<PrintWriter> channelUsers = channels.get(currentChannel);
+                                if (channelUsers.size() >= 2) {
+                                    out.println("Il canale è pieno. Disconnessione...");
+                                    return;
+                                }
+                                channelUsers.add(out);
+                            }
+                            username = userDetails.getFiscalCode();
+                            log.info("Ciao " + username + ", benvenuto nel tuo canale: "
+                                    + currentChannel);
+                            out.println("Ciao " + username
+                                    + ", benvenuto nella chat di supporto, a breve un nostro operatore si collegherà per aiutarti!.\nSalva l'ID della chat per recuperarla in futuro: "
+                                    + UUID.randomUUID());
+                        
+                        
+                                }
                         break;
                     default:
                         log.error("Choice {} illegal.", scelta);
@@ -145,24 +135,25 @@ public class IRCChatServer {
 
                 String message;
                 while ((message = in.readLine()) != null) {
-                    broadcastMessage(username, message, channel.getChannel());
+                    broadcastMessage(username, message, currentChannel);
                 }
             } catch (IOException e) {
-                e.printStackTrace();
-            }
-            finally {
+                log.error("Error handling client: ", e);
+            } finally {
                 try {
+                    CacheService cacheService = new CacheService();
+                    cacheService.save(username,new CacheObject(in,out));
                     socket.close();
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    log.error("Error closing socket: ", e);
                 }
             }
         }
 
         private void broadcastMessage(String username, String message, String userChannel) {
-            synchronized (channels) {
-                List<PrintWriter> channelUsers = channels.get(userChannel);
-                if (channelUsers != null) {
+            List<PrintWriter> channelUsers = channels.get(userChannel);
+            if (channelUsers != null) {
+                synchronized (channelUsers) {
                     for (PrintWriter writer : channelUsers) {
                         writer.println(username + "@" + userChannel + ": " + message);
                     }
@@ -171,15 +162,14 @@ public class IRCChatServer {
         }
 
         private void broadcastMessage(String message, String userChannel) {
-            synchronized (channels) {
-                List<PrintWriter> channelUsers = channels.get(userChannel);
-                if (channelUsers != null) {
+            List<PrintWriter> channelUsers = channels.get(userChannel);
+            if (channelUsers != null) {
+                synchronized (channelUsers) {
                     for (PrintWriter writer : channelUsers) {
                         writer.println(message);
                     }
                 }
             }
         }
-
     }
 }
