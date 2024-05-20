@@ -6,6 +6,8 @@ import telnetlib
 from fastapi import FastAPI, WebSocket
 from typing import Set
 import websockets
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI()
 
 
@@ -17,8 +19,11 @@ port=env["telnet"]["port"]
 r = redis.Redis(host=env["redis"]["hostname"], port=env["redis"]["port"], db=0)
 
 
+
 # Set di clients già connessi
 connected_clients: Set[WebSocket] = set()
+
+app.add_middleware(CORSMiddleware,allow_origins=["*"],allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
 
 '''
 Endpoint REST di tipo GET per il recupero della chat tramite CODICE FISCALE UTENTE
@@ -56,7 +61,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 una chiamata periodica verso la cache. Tale scelta, sebbene sia discutibile in termini di performance, ci assicura che i
                 messaggi siano presentati a front-end secondo il consueto ordine.
             '''
-
+            print(message)
             '''
                 La connessione viene chiusa in modo corretto, senza causare il lancio di eccezioni lato Java, quando viene
                 lanciato il comando /exit
@@ -68,3 +73,6 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"Errore durante la comunicazione Telnet: {e}")
 
 
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
