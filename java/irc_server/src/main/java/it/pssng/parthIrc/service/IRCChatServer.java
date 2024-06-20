@@ -22,11 +22,11 @@ public class IRCChatServer {
 
         BannerUtil.printBanner();
 
-        log.info("Testing Redis..");
+        log.info("Testing Cache..");
         CacheService cache = new CacheService();
 
-        JsonRedis jsonRedis = new JsonRedis("TEST_REDIS");
-        jsonRedis.loadMessage(new JsonMessage("TEST_REDIS", "HELLO FROM PSSNG IRC"));
+        JsonRedis jsonRedis = new JsonRedis("TEST_CACHE");
+        jsonRedis.loadMessage(new JsonMessage("TEST_CACHE", "HELLO FROM PSSNG IRC"));
         cache.save("TEST_FISCAL_CODE", jsonRedis.toString());
 
         ServerSocket serverSocket = new ServerSocket(PORT);
@@ -103,7 +103,6 @@ public class IRCChatServer {
                         log.info(cacheHistory);
                         cacheHistory.loadMessage(new JsonMessage(username, message));
                         cache.save(redisKey, cacheHistory.toString());
-                        cache.close();
                     } else {
 
                         JsonRedis jsonRedis = new JsonRedis(redisKey);
