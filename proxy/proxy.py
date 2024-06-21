@@ -32,9 +32,15 @@ Path Variables -> chat_key = chiave dei dati in cache: coincide con il codice fi
 '''
 @app.get("/chat/{chat_key}")
 async def get_chat_content(chat_key: str):
-    # Parsing in JSON del contenuto sottoforma di JSON String in Base64.
-    return json.loads(base64.b64decode(str(r.get(chat_key)).split("'")[1]))
-
+    ## Parsing in JSON del contenuto sottoforma di JSON String in Base64.
+    url = 'http://localhost:8080/api/v1/cache/get?id='+chat_key
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        print(data)
+    else:
+        print('Errore nella chiamata API:', response.status_code)
+    return json.loads(base64.b64decode(str(response.content).split("'")[1]))
 
 '''
 Endpoint WEBSOCKET per il collegamento al sistema PSSNG (Progressive Solutions For Next Gen) CHAT tramite telnet.
