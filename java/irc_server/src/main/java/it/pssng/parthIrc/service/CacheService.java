@@ -1,11 +1,9 @@
 package it.pssng.parthIrc.service;
 
 import it.pssng.parthIrc.json.JsonRedis;
-import it.pssng.parthIrc.json.Message;
 import it.pssng.parthIrc.json.JsonMessage;
 import lombok.extern.log4j.Log4j2;
 
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -18,11 +16,8 @@ import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.StringReader;
-import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -59,7 +54,6 @@ public class CacheService {
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 // Stampa la risposta ottenuta
-                String responseBody = response.body();
                 log.info("Response from server:");
                 log.info(response.body());
                 encodedResponse = decodeFromBase64(response.body());
