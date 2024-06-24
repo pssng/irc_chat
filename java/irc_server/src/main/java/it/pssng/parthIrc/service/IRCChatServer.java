@@ -10,6 +10,7 @@ import it.pssng.parthIrc.model.SessionData;
 
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -17,17 +18,18 @@ import java.util.concurrent.*;
 public class IRCChatServer {
     private static final int PORT = 8887;
     private static final Map<String, List<PrintWriter>> channels = new ConcurrentHashMap<>();
+    private static CacheService cacheService;
 
     public static void main(String[] args) throws IOException {
 
         BannerUtil.printBanner();
 
         log.info("Testing Cache..");
-        CacheService cache = new CacheService();
+        cacheService = new CacheService();
 
         JsonRedis jsonRedis = new JsonRedis("TEST_CACHE");
         jsonRedis.loadMessage(new JsonMessage("TEST_CACHE", "HELLO FROM PSSNG IRC"));
-        cache.save("TEST_FISCAL_CODE", jsonRedis.toString());
+        cacheService.save("TEST_FISCAL_CODE", jsonRedis.toString());
 
         ServerSocket serverSocket = new ServerSocket(PORT);
         log.info("Service started at port {}", PORT);
@@ -53,11 +55,11 @@ public class IRCChatServer {
         @SneakyThrows
         public void run() {
             try {
-                in = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
-                out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8"), true);
+                in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+                out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
 
                 out.println("");
-                SessionData userDetails = new SessionData(in.readLine());                
+                SessionData userDetails = new SessionData(in.readLine());
 
                 if (userDetails.getRole() == UserRole.ADMIN) {
                     username = userDetails.getFiscalCode();
@@ -83,8 +85,7 @@ public class IRCChatServer {
                         channelUsers.add(out);
                     }
                     username = userDetails.getFiscalCode();
-                    log.info("Ciao " + username + ", benvenuto nel tuo canale: "
-                            + currentChannel);
+                    log.info("Ciao " + username + ", benvenuto nel tuo canale: " + currentChannel);
                     out.println("Ciao " + username
                             + ", benvenuto nella chat di supporto, a breve un nostro operatore si collegherà per aiutarti!.\nSalva l'ID della chat per recuperarla in futuro: "
                             + UUID.randomUUID());
@@ -94,33 +95,39 @@ public class IRCChatServer {
                 String message;
                 while ((message = in.readLine()) != null) {
                     broadcastMessage(username, message, currentChannel);
-                    CacheService cache = new CacheService();
 
-                    String redisKey = userDetails.getRole() == UserRole.ADMIN ? currentChannel.split("_")[1] : username;
-
-                    if (cache.exists(redisKey)) {
-                        JsonRedis cacheHistory = cache.retrieve(redisKey);
-                        log.info(cacheHistory);
-                        cacheHistory.loadMessage(new JsonMessage(username, message));
-                        cache.save(redisKey, cacheHistory.toString());
-                    } else {
-
-                        JsonRedis jsonRedis = new JsonRedis(redisKey);
-                        jsonRedis.loadMessage(new JsonMessage(username, message));
-                        cache.save(redisKey, jsonRedis.toString());
-                    }
-
+                    // Aggiornamento della cache
+                    handleCacheUpdate(userDetails, currentChannel, username, message);
                 }
-            } catch (
-
-            IOException e) {
-                log.error("Error handling client: ", e);
+            } catch (SocketException e) {
+                log.error("SocketException: Connection reset by peer");
+            } catch (IOException e) {
+                log.error("IOException while handling client", e);
             } finally {
                 try {
                     socket.close();
                 } catch (IOException e) {
-                    log.error("Error closing socket: ", e);
+                    log.error("Error closing socket", e);
                 }
+            }
+        }
+
+        private void handleCacheUpdate(SessionData userDetails, String currentChannel, String username,
+                String message) {
+            String redisKey = userDetails.getRole() == UserRole.ADMIN ? currentChannel.split("_")[1] : username;
+
+            if (cacheService.exists(redisKey)) {
+                JsonRedis cacheHistory = cacheService.retrieve(redisKey);
+                log.info("Retrieved from cache: {}", cacheHistory);
+
+                // Aggiungi il nuovo messaggio alla lista dei messaggi
+                cacheHistory.loadMessage(new JsonMessage(username, message));
+                cacheService.save(redisKey, cacheHistory.toString());
+            } else {
+                // Crea una nuova istanza di JsonRedis e salva il primo messaggio
+                JsonRedis jsonRedis = new JsonRedis(redisKey);
+                jsonRedis.loadMessage(new JsonMessage(username, message));
+                cacheService.save(redisKey, jsonRedis.toString());
             }
         }
 

@@ -1,14 +1,19 @@
 package it.pssng.parthIrc.json;
 
 import com.google.gson.JsonObject;
-import java.util.ArrayList;
-import java.util.List;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 
 import it.pssng.parthIrc.service.CacheService;
+import lombok.Data;
 import lombok.extern.log4j.Log4j2;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Log4j2
+@Data
 public class JsonRedis {
 
     private String chatIdData;
@@ -22,7 +27,6 @@ public class JsonRedis {
 
     public String toString() {
         JsonObject returnJson = new JsonObject();
-
         returnJson.addProperty("chat-id", chatIdData);
 
         JsonArray messagesArray = new JsonArray();
@@ -47,6 +51,21 @@ public class JsonRedis {
 
     public static JsonRedis loadFromCache(String chatId) {
         CacheService cacheService = new CacheService();
-        return cacheService.retrieve(chatId);
+        return cacheService.retrieve("chat:" + chatId);
+    }
+
+    public static JsonRedis fromJson(String jsonString) {
+        JsonObject jsonObject = JsonParser.parseString(jsonString).getAsJsonObject();
+        String chatId = jsonObject.get("chat-id").getAsString();
+        JsonRedis jsonRedis = new JsonRedis(chatId);
+
+        JsonArray messagesArray = jsonObject.getAsJsonArray("list");
+        for (JsonElement element : messagesArray) {
+            JsonObject messageJson = element.getAsJsonObject();
+            JsonMessage jsonMessage = JsonMessage.fromJson(messageJson);
+            jsonRedis.loadMessage(jsonMessage);
+        }
+
+        return jsonRedis;
     }
 }

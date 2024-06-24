@@ -77,7 +77,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except Exception as e:
         print(f"Errore durante la comunicazione Telnet: {e}")
-
 # Carica la chiave API da un file
 def load_api_key(file_path):
     with open(file_path, "r") as file:
